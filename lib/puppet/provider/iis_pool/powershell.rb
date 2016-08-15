@@ -27,7 +27,7 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
 
   def self.instances
     pools = []
-    inst_cmd = 'Import-Module WebAdministration;gci "IIS:\AppPools" | ConvertTo-Xml -Depth 4 -NoTypeInformation -As String'
+    inst_cmd = 'Import-Module WebAdministration;gci "IIS:\AppPools" | Select State,Name,enable32BitApponWin64,managedRuntimeVersion,managedPipelineMode | ConvertTo-Xml -Depth 4 -NoTypeInformation -As String'
     result = run(inst_cmd)
     xml = Document.new result
     xml.root.each_element do |object|

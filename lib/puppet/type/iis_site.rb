@@ -64,14 +64,7 @@ Puppet::Type.newtype(:iis_site) do
    desc 'State of the '
  end
 
- newproperty(:id) do
-    desc 'The site id'
-#    validate do |value|
-#      raise("#{id} is not a valid site id. Please use a number.") unless value =~ %r{[1-9]\d*$}
-#    end
-  end
-
-  newproperty(:ip) do
+ newproperty(:ip) do
     desc 'IP Address for the web site'
 
     def valid_v4?(addr)
@@ -109,7 +102,11 @@ Puppet::Type.newtype(:iis_site) do
   newproperty(:ssl) do
     desc 'If ssl is enabled for the site'
     newvalues(:false, :true)
-    defaultto :false
+    #TODO Removed the default to fix Windows 2008 support (for now?)
+  end
+  
+  newproperty(:id) do
+    desc 'The site id'
   end
 
   autorequire(:iis_pool) do
