@@ -7,7 +7,8 @@ Puppet::Type.type(:iis_site).provide(:powershell, parent: Puppet::Provider::Iisp
     super(value)
     @property_flush = {
       'itemproperty' => {},
-      'binders'      => {}
+      'webconfig'    => {},
+      'binders'      => {},
     }
   end
 
@@ -20,9 +21,42 @@ Puppet::Type.type(:iis_site).provide(:powershell, parent: Puppet::Provider::Iisp
   end
 
   def self.webconfig
-    {
-      id: 'id',
-    }
+    %w(
+      id
+    )
+  end
+
+  def self.binders
+    %w(
+      protocol
+      ip
+      port
+      host_header
+      ssl
+    )
+  end
+  
+  webconfig.each do |property,item|
+    define_method "#{property}=" do |value|
+      @property_flush['webconfig'][item] = value
+      @property_hash[property.to_sym] = value
+    end
+  end
+
+  iisnames.each do |property, iisname|
+    next if property == :ensure
+    next if property == :ssl and Facter.value(:kernelmajversion) == '6.1'
+    define_method "#{property}=" do |value|
+      @property_flush['itemproperty'][iisname] = value
+      @property_hash[property.to_sym] = value
+    end
+  end
+
+  binders.each do |property|
+    define_method "#{property}=" do |value|
+      @property_flush['binders'][property] = value
+      @property_hash[property.to_sym] = value
+    end
   end
 
   def self.instances
@@ -38,9 +72,14 @@ ps1
       if !host_header
         host_header = "*"
       end
-
+      # If the site gets into an unknown state return 'unknown' instead of null.
+      state = if !object.elements["Property[@Name='state']"].text
+                'unknown'
+              else
+                object.elements["Property[@Name='state']"].text.downcase
+              end
       site_hash = {
-          :state        => object.elements["Property[@Name='state']"].text.downcase,
+          :state        => state,
           :name         => object.elements["Property[@Name='name']"].text,
           :id           => object.elements["Property[@Name='id']"].text,
           :protocol     => object.elements["Property[@Name='bindings']/Property[@Name='Collection']/Property/Property[@Name='protocol']"].text,
@@ -58,20 +97,9 @@ ps1
         end
         site_hash[:ssl] = ssl_flags
       end
-      Puppet.notice site_hash[:state]
-      Puppet.notice site_hash[:name]
-      Puppet.notice site_hash[:port]
-      Puppet.notice site_hash[:id]
-      Puppet.notice site_hash[:protocol]
-      Puppet.notice site_hash[:ip]
-      Puppet.notice site_hash[:host_header]
-      Puppet.notice site_hash[:app_pool]
-      Puppet.notice site_hash[:path]
-      Puppet.notice site_hash[:ssl]
       sites.push(site_hash)
     end
     sites.map do |site|
-      if !@property_hash[:ssl] then @resource[:ssl] = :false end
       case Facter.value(:kernelmajversion)
         when %r{6.1}
           new(
@@ -86,6 +114,8 @@ ps1
               :path        => site[:path],
           )
         else
+          # Moved the default ssl from type to here to get around Windows 2008
+          if !site[:ssl] then site[:ssl] = :false end
           new(
               :ensure      => site[:state],
               :name        => site[:name],
@@ -113,14 +143,19 @@ ps1
   end
 
   def exists?
-    Puppet.notice "exists"
     %w(stopped started).include?(@property_hash[:ensure])
   end
 
   mk_resource_methods
 
   def create
-    Puppet.notice "create"
+    if Facter.value(:kernelmajversion) == '6.1'
+      if !@resource[:ssl]
+        @property_hash[:ssl] = 'false'
+      else
+        @property_hash[:ssl] = @resource[:ssl]
+      end
+    end
     create_switches = [
       "-Name \"#{@resource[:name]}\"",
       "-Port #{@resource[:port]} -IP #{@resource[:ip]}",
@@ -129,10 +164,10 @@ ps1
       "-ApplicationPool \"#{@resource[:app_pool]}\"",
       '-Force'
     ]
-    unless Facter.value(:kernelmajversion) == '6.1' then create_switches << "-Ssl:$#{@resource[:ssl]}" end
-    inst_cmd = "Import-Module WebAdministration; New-Website #{create_switches.join(' ')}"
+    unless Facter.value(:kernelmajversion) == '6.1' || !@resource[:ssl] then create_switches << "-Ssl:$#{@resource[:ssl]}" end
+    inst_cmd = "Import-Module WebAdministration; New-Website #{create_switches.join(' ')} -ErrorVariable err |Out-null;\$err"
     resp = Puppet::Type::Iis_site::ProviderPowershell.run(inst_cmd)
-    Puppet.debug "Creation powershell response was #{resp}"
+    Puppet.debug "Response from PowerShell create task: #{resp}"
 
     @resource.original_parameters.each_key do |k|
       @property_hash[k] = @resource[k]
@@ -142,13 +177,7 @@ ps1
     @property_hash[:ip]          = @resource[:ip]
     @property_hash[:host_header] = @resource[:host_header]
     @property_hash[:path]        = @resource[:path]
-    if Facter.value(:kernelmajversion) == '6.1'
-      if !@resource[:ssl]
-        @property_hash[:ssl] = :false
-      else
-        @property_hash[:ssl] = @resource[:ssl]
-      end
-    end
+    
     exists? ? (return true) : (return false)
   end
 
@@ -158,40 +187,6 @@ ps1
     raise(resp) unless resp.empty?
     @property_hash.clear
     exists? ? (return false) : (return true)
-  end
-
-  webconfig.each do |property,item|
-    define_method "#{property}=" do |value|
-      @property_flush['webconfig'][item] = value
-      @property_hash[property.to_sym] = value
-    end
-  end
-
-  iisnames.each do |property, iisname|
-    next if property == :ensure
-    next if property == :ssl and Facter.value(:kernelmajversion) == '6.1'
-    define_method "#{property}=" do |value|
-      @property_flush['itemproperty'][iisname] = value
-      @property_hash[property.to_sym] = value
-    end
-  end
-
-  # These three properties have to be submitted together
-  def self.binders
-    %w(
-      protocol
-      ip
-      port
-      host_header
-      ssl
-    )
-  end
-
-  binders.each do |property|
-    define_method "#{property}=" do |value|
-      @property_flush['binders'][property] = value
-      @property_hash[property.to_sym] = value
-    end
   end
 
   def start
@@ -232,7 +227,7 @@ ps1
   def flush
     command_array = []
     command_array << 'Import-Module WebAdministration; '
-    if @property_flush['state']
+    if @property_flush['state'] && exists? == :true
       state_cmd = if @property_flush['state'] == :Started
                     'Start-Website'
                   else
@@ -242,9 +237,8 @@ ps1
       command_array << state_cmd
     end
     # This will iterate over any 'Set-WebConfigurationProperty' items, currently only the site id.
-    unless Facter.value(:kernelmajversion) == '6.1'
+    unless @property_flush['webconfig'].empty?
       @property_flush['webconfig'].each do |webconfig, value|
-        Puppet.notice webconfig
         command_array << "Set-WebConfigurationProperty '/system.applicationhost/sites/site[@name=\"#{@property_hash[:name]}\"]' -name \"#{webconfig}\" -Value \"#{value}\""
       end
     end

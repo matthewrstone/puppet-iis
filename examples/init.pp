@@ -27,7 +27,7 @@ iis_site { 'MyWebSite' :
 
 # Create an application
 iis_application { 'MyWebApp' :
-  ensure => started,      # present|absent|started|stopped
+  ensure => present,      # present|absent|started|stopped
   site   => 'MyWebSite',  # website created in iis_site
 } ->
 

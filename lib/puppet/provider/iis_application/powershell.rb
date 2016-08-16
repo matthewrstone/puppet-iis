@@ -59,7 +59,7 @@ Puppet::Type.type(:iis_application).provide(:powershell, parent: Puppet::Provide
       "-PhysicalPath \"#{@resource[:path]}\"",
       "-Site \"#{@resource[:site]}\"",
       "-ApplicationPool \"#{@resource[:app_pool]}\"",
-      '-Force'
+      '-Force', "-ErrorVariable err | Out-Null; \$err"
     ]
     resp = Puppet::Type::Iis_application::ProviderPowershell.run(inst_cmd.join(' '))
     raise(resp) unless resp.empty?

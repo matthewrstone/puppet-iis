@@ -34,7 +34,7 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
       pool_hash = {
         :ensure        => object.elements["Property[@Name='state']"].text.downcase,
         :name          => object.elements["Property[@Name='name']"].text,
-        :enable_32_bit => object.elements["Property[@Name='enable32BitAppOnWin64']"].text.to_s.to_sym || :false,
+        :enable_32_bit => object.elements["Property[@Name='enable32BitAppOnWin64']"].text.downcase,  #.to_s.to_sym || :false,
         :runtime       => object.elements["Property[@Name='managedRuntimeVersion']"].text,
         :pipeline      => object.elements["Property[@Name='managedPipelineMode']"].text,
       }
@@ -68,7 +68,7 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
   mk_resource_methods
 
   def create
-    inst_cmd = "Import-Module WebAdministration; New-WebAppPool -Name \"#{@resource[:name]}\""
+    inst_cmd = "Import-Module WebAdministration; New-WebAppPool -Name \"#{@resource[:name]}\" -ErrorVariable err | Out-Null; \$err"
     Puppet::Type::Iis_pool::ProviderPowershell.poolattrs.each do |property, value|
       inst_cmd += "; Set-ItemProperty \"IIS:\\\\AppPools\\#{@resource[:name]}\" #{value} #{@resource[property]}" if @resource[property]
     end
