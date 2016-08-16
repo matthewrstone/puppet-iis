@@ -3,17 +3,17 @@
 # application and virtual directory. This manifest cleans up
 # if you've run puppet apply on initpp
 
-# Remove the virtual directory
-iis_virtualdirectory { 'MyVirtualDirectory':
-  ensure => absent,                    # present|absent
-  site   => 'MyWebSite',                # website created in iis_site
-  path   => 'c:\iis_example\virt_dir' , # path to physical directory
-} ->
-
 # Remove the application
 iis_application { 'MyWebApp' :
-  ensure => absent,      # present|absent|started|stopped
+  ensure => absent,       # present|absent|started|stopped
   site   => 'MyWebSite',  # website created in iis_site
+} ->
+
+# Remove the virtual directory
+iis_virtualdirectory { 'MyVirtualDirectory':
+  ensure => absent,                     # present|absent
+  site   => 'MyWebSite',                # website created in iis_site
+  path   => 'c:\iis_example\virt_dir' , # path to physical directory
 } ->
 
 # Remove the website
@@ -36,7 +36,7 @@ iis_pool { 'MyAppPool' :
 } ->
 
 # Remove temp folders for our example
-file { 'c:\iis_example\virt_dir' : ensure => absent }
+file { 'c:\iis_example\virt_dir' : ensure => absent } ->
 file { 'c:\iis_example' : ensure => absent }
 
 
