@@ -62,6 +62,7 @@ ps1
     end
     sites.map do |site|
       case Facter.value(:kernelmajversion)
+      if !@property_hash[:ssl] then @resource[:ssl] = :false
         when %r{6.1}
           new(
               :ensure      => site[:state],
