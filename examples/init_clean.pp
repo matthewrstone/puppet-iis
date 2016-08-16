@@ -7,7 +7,6 @@
 iis_application { 'MyWebApp' :
   ensure => absent,       # present|absent|started|stopped
   site   => 'MyWebSite',  # website created in iis_site
-  before => Iis_pool['MyAppPool'],
 }
 
 # Remove the virtual directory
@@ -15,7 +14,6 @@ iis_virtualdirectory { 'MyVirtualDirectory':
   ensure => absent,                     # present|absent
   site   => 'MyWebSite',                # website created in iis_site
   path   => 'c:\iis_example\virt_dir' , # path to physical directory
-  before => Iis_pool['MyAppPool'],
 }
 
 # Remove the website
@@ -35,7 +33,6 @@ iis_pool { 'MyAppPool' :
   runtime       => 'v2.0',        # v2.0 or v.4.0 for .NET runtime
   pipeline      => 'integrated',  # integrated|classic
   enable_32_bit => false,         # true|false
-  before        => Iis_site['MyWebSite']
 }
 
 # Remove temp folders for our example
