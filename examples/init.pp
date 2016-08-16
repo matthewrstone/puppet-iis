@@ -8,7 +8,7 @@ file { 'c:\iis_example\virt_dir': ensure => directory}
 
 # Create an application pool
 iis_pool { 'MyAppPool' :
-  enable        => started,       # present|absent|started|stopped
+  ensure        => started,       # present|absent|started|stopped
   runtime       => 'v2.0',        # v2.0 or v.4.0 for .NET runtime
   pipeline      => 'integrated',  # integrated|classic
   enable_32_bit => false,         # true|false
