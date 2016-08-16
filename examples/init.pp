@@ -16,7 +16,7 @@ iis_pool { 'MyAppPool' :
 
 # Create a website
 iis_site { 'MyWebSite' :
-  enable      => started,                    # present|absent|started|stopped
+  ensure      => started,                    # present|absent|started|stopped
   path        => 'c:\iis_example',           # physical path
   app_pool    => 'MyAppPool',                # app pool created in iis_pool 
   host_header => 'www.puppetonwindows.com',  # primary hostname for the site
