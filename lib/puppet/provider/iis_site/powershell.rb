@@ -58,20 +58,20 @@ ps1
         end
         site_hash[:ssl] = ssl_flags
       end
+      Puppet.notify site_hash[:state]
+      Puppet.notify site_hash[:name]
+      Puppet.notify site_hash[:port]
+      Puppet.notify site_hash[:id]
+      Puppet.notify site_hash[:protocol]
+      Puppet.notify site_hash[:ip]
+      Puppet.notify site_hash[:host_header]
+      Puppet.notify site_hash[:app_pool]
+      Puppet.notify site_hash[:path]
+      Puppet.notify site_hash[:ssl]
       sites.push(site_hash)
     end
     sites.map do |site|
       if !@property_hash[:ssl] then @resource[:ssl] = :false end
-      Puppet.notify site[:state]
-      Puppet.notify site[:name]
-      Puppet.notify site[:port]
-      Puppet.notify site[:id]
-      Puppet.notify site[:protocol]
-      Puppet.notify site[:ip]
-      Puppet.notify site[:host_header]
-      Puppet.notify site[:app_pool]
-      Puppet.notify site[:path]
-      Puppet.notify site[:ssl]
       case Facter.value(:kernelmajversion)
         when %r{6.1}
           new(
