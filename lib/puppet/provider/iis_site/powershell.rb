@@ -63,14 +63,14 @@ ps1
     sites.map do |site|
       if !@property_hash[:ssl] then @resource[:ssl] = :false end
       Puppet.notify site[:state]
-      Puppet.notify site[:name],
-      Puppet.notify site[:port],
-      Puppet.notify site[:id],
-      Puppet.notify site[:protocol],
-      Puppet.notify site[:ip],
-      Puppet.notify site[:host_header],
-      Puppet.notify site[:app_pool],
-      Puppet.notify site[:path],
+      Puppet.notify site[:name]
+      Puppet.notify site[:port]
+      Puppet.notify site[:id]
+      Puppet.notify site[:protocol]
+      Puppet.notify site[:ip]
+      Puppet.notify site[:host_header]
+      Puppet.notify site[:app_pool]
+      Puppet.notify site[:path]
       Puppet.notify site[:ssl]
       case Facter.value(:kernelmajversion)
         when %r{6.1}
