@@ -132,7 +132,11 @@ ps1
     @property_hash[:host_header] = @resource[:host_header]
     @property_hash[:path]        = @resource[:path]
     if Facter.value(:kernelmajversion) == '6.1'
-      @property_hash[:ssl]         = @resource[:ssl]
+      if !@resource[:ssl]
+        @property_hash[:ssl] = :false
+      else
+        @property_hash[:ssl] = @resource[:ssl]
+      end
     end
     exists? ? (return true) : (return false)
   end
