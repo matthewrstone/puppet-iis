@@ -58,16 +58,16 @@ ps1
         end
         site_hash[:ssl] = ssl_flags
       end
-      Puppet.notify site_hash[:state]
-      Puppet.notify site_hash[:name]
-      Puppet.notify site_hash[:port]
-      Puppet.notify site_hash[:id]
-      Puppet.notify site_hash[:protocol]
-      Puppet.notify site_hash[:ip]
-      Puppet.notify site_hash[:host_header]
-      Puppet.notify site_hash[:app_pool]
-      Puppet.notify site_hash[:path]
-      Puppet.notify site_hash[:ssl]
+      Puppet.notice site_hash[:state]
+      Puppet.notice site_hash[:name]
+      Puppet.notice site_hash[:port]
+      Puppet.notice site_hash[:id]
+      Puppet.notice site_hash[:protocol]
+      Puppet.notice site_hash[:ip]
+      Puppet.notice site_hash[:host_header]
+      Puppet.notice site_hash[:app_pool]
+      Puppet.notice site_hash[:path]
+      Puppet.notice site_hash[:ssl]
       sites.push(site_hash)
     end
     sites.map do |site|
