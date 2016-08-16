@@ -9,8 +9,8 @@ file { 'c:\iis_example\virt_dir': ensure => directory}
 # Create an application pool
 iis_pool { 'MyAppPool' :
   enable        => started,       # present|absent|started|stopped
-  runtime       => 'v2.0'         # v2.0 or v.4.0 for .NET runtime
-  pipeline      => 'integrated'   # integrated|classic
+  runtime       => 'v2.0',        # v2.0 or v.4.0 for .NET runtime
+  pipeline      => 'integrated',  # integrated|classic
   enable_32_bit => false,         # true|false
 } ->
 
@@ -33,7 +33,7 @@ iis_application { 'MyWebApp' :
 
 # Create a virtual directory
 iis_virtualdirectory { 'MyVirtualDirectory':
-  ensure => present,                   # present|absent
-  site   => 'MyWebSite',               # website created in iis_site
-  path   => 'c:\iis_example\virt_dir'  # path to physical directory
+  ensure => present,                    # present|absent
+  site   => 'MyWebSite',                # website created in iis_site
+  path   => 'c:\iis_example\virt_dir' , # path to physical directory
 }
