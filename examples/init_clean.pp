@@ -36,7 +36,7 @@ iis_pool { 'MyAppPool' :
 } ->
 
 # Remove temp folders for our example
-file { 'c:\iis_example\virt_dir': ensure => absent.} ->
+file { 'c:\iis_example\virt_dir' : ensure => absent }
 file { 'c:\iis_example' : ensure => absent }
 
 
