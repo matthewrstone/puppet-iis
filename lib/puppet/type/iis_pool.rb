@@ -53,6 +53,75 @@ Puppet::Type.newtype(:iis_pool) do
     munge(&:capitalize)
   end
 
+## NEW APP POOL SETTINGS
+  newproperty(:autostart) do
+    desc 'Set the autostart property.'
+    newvalues(:false,:true)
+    defaultto(:true)
+  end
+
+  newproperty(:start_mode) do
+    desc 'The start mode for the app pool.'
+    newvalues(:OnDemand,:ondemand,:AlwaysRunning,:alwaysrunning)
+    #validate do |value|
+    #  raise("#{start_mode must be OnDemand or AlwaysRunning}") unless value =~ %r{^(OnDemand|AlwaysRunning)$}
+    #end
+  end
+
+  newproperty(:rapid_fail_protection) do
+    desc 'Set the rapid fail protection property.'
+    newvalues(:false,:true)
+    defaultto(:true)
+  end
+
+  newproperty(:identitytype) do
+    desc 'Set the identity type'
+    newvalues(:localsystem,
+              :localservice,
+              :networkservice,
+              :specificuser,
+              :applicationpoolidentity,
+    )
+  end
+
+  newproperty(:username) do
+    desc 'set a username'
+  end
+
+  newproperty(:password) do
+    desc 'set a password'
+  end
+
+  newproperty(:idle_timeout) do
+    desc 'set the idle timeout'
+  end
+
+  newproperty(:idle_timeout_action) do
+    # property does not exists in Win2008r2?
+    desc 'set the default idle timeout action'
+    newvalues(:suspend,:terminate)
+  end
+
+  newproperty(:max_processes) do
+    desc 'set max processes'
+  end
+
+  newproperty(:max_queue_length) do
+    desc 'set max queue length'
+  end
+
+  newproperty(:recycle_perodic_minutes) do
+    desc 'the recyle time in minutes'
+  end
+
+  newproperty(:recycle_schedule) do
+    desc 'the recycle schedule'
+  end
+
+  newproperty(:recycle_logging) do
+    desc 'enable recycle logging'
+  end
+  
   def refresh
     if self[:ensure] == :present && (provider.enabled? || self[:ensure] == 'started')
       provider.restart

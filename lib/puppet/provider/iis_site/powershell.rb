@@ -1,5 +1,6 @@
 require 'puppet/provider/iispowershell'
 require 'rexml/document'
+require 'csv'
 include REXML
 
 Puppet::Type.type(:iis_site).provide(:powershell, parent: Puppet::Provider::Iispowershell) do
@@ -59,33 +60,76 @@ Puppet::Type.type(:iis_site).provide(:powershell, parent: Puppet::Provider::Iisp
     end
   end
 
+  def self.install_command
+    # if we are on windows 2008 then true
+    win2008 = Facter.value(:kernelmajversion) == '6.1'
+    if win2008 == true
+      cmd = <<-ps1.gsub /^\s+/, ""
+        Import-Module WebAdministration
+        Get-Website | Select Name,ID,PhysicalPath,ApplicationPool,State | ConvertTo-XML -As String -Depth 4 -NoTypeInformation
+      ps1
+    else
+      cmd = <<-ps1.gsub /^\s+/, ""
+        Import-Module WebAdministration
+        Get-Website | Select Name,ID,PhysicalPath,ApplicationPool,State,Bindings | ConvertTo-Xml -As String -Depth 4 -NoTypeInformation
+      ps1
+    end
+    return cmd
+  end
+
+  def self.legacy_bindings(site_name)
+    result = run("Get-WebBinding -Name '#{site_name}'| ConvertTo-CSV -NoTypeInformation")
+    csv = CSV.parse(result,:headers => true)
+    ip = csv['bindingInformation'][0].split(':')[0]
+    host_header = csv['bindingInformation'][0].split(':')[2]
+    if !host_header
+      host_header = "*"
+    end
+    port = csv['bindingInformation'][0].split(':')[1]
+    protocol = csv['protocol'][0]
+    bindings = {
+        :ip          => ip,
+        :host_header => host_header,
+        :port        => port,
+        :protocol    => protocol,
+    }
+    return bindings
+  end
+
   def self.instances
-    sites = []
-    inst_cmd = <<-ps1
-Import-Module WebAdministration;
-gci "IIS:\\sites" | %{ Get-ItemProperty $_.PSPath  | Select name, id, PhysicalPath, ApplicationPool, HostHeader, State, Bindings } | ConvertTo-Xml -Depth 4 -As String -NoTypeInformation
-ps1
+    win2008 = Facter.value(:kernelmajversion) == '6.1'
+    inst_cmd = install_command
     result = run(inst_cmd)
+    sites = []
     xml = Document.new result
     xml.root.each_element do |object|
-      host_header = object.elements["Property[@Name='bindings']/Property[@Name='Collection']/Property/Property[@Name='bindingInformation']"].text.split(':')[2]
-      if !host_header
-        host_header = "*"
-      end
+      site_name = object.elements["Property[@Name='name']"].text
       # If the site gets into an unknown state return 'unknown' instead of null.
       state = if !object.elements["Property[@Name='state']"].text
                 'unknown'
               else
                 object.elements["Property[@Name='state']"].text.downcase
               end
+      if win2008
+        binding_hash = self.legacy_bindings(site_name)
+        protocol = binding_hash[:protocol]
+        ip = binding_hash[:ip]
+        host_header = binding_hash[:host_header]
+        port = binding_hash[:port]
+      else
+        protocol = object.elements["Property[@Name='bindings']/Property[@Name='Collection']/Property/Property[@Name='protocol']"].text
+        ip = object.elements["Property[@Name='bindings']/Property[@Name='Collection']/Property/Property[@Name='bindingInformation']"].text.split(':')[0]
+        host_header = object.elements["Property[@Name='bindings']/Property[@Name='Collection']/Property/Property[@Name='bindingInformation']"].text.split(':')[2]
+        port = object.elements["Property[@Name='bindings']/Property[@Name='Collection']/Property/Property[@Name='bindingInformation']"].text.split(':')[1]
+      end
       site_hash = {
           :state        => state,
-          :name         => object.elements["Property[@Name='name']"].text,
-          :id           => object.elements["Property[@Name='id']"].text,
-          :protocol     => object.elements["Property[@Name='bindings']/Property[@Name='Collection']/Property/Property[@Name='protocol']"].text,
-          :ip           => object.elements["Property[@Name='bindings']/Property[@Name='Collection']/Property/Property[@Name='bindingInformation']"].text.split(':')[0],
-          :port         => object.elements["Property[@Name='bindings']/Property[@Name='Collection']/Property/Property[@Name='bindingInformation']"].text.split(':')[1],
+          :name         => site_name,
+          :protocol     => protocol,
+          :ip           => ip,
+          :port         => port,
           :host_header  => host_header,
+          :id           => object.elements["Property[@Name='id']"].text,
           :app_pool     => object.elements["Property[@Name='applicationPool']"].text,
           :path         => object.elements["Property[@Name='physicalPath']"].text,
       }

@@ -12,9 +12,29 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
 
   def self.poolattrs
     {
+      autostart: 'autostart',
       enable_32_bit: 'enable32BitAppOnWin64',
       runtime: 'managedRuntimeVersion',
-      pipeline: 'managedPipelineMode'
+      # If options change to Int32, make a hash of the key and values like below.
+      pipeline: {
+        'managedPipelineMode' => {
+          'integrated' => 0,
+          'classic'    => 1,
+        },
+      },
+      # TODO IDLE TIMEOUT ACTION FROM XML
+      start_mode: 'startMode',
+      rapid_fail_protection: 'failure.rapidFailProtection',
+      identitytype: 'processModel.identityType',
+      username: 'processModel.username',
+      password: 'processModel.password',
+      idle_timeout: 'processModel.idleTimeout',
+      idle_timeout_action: 'processModel.idleTimeoutAction',
+      max_processes: 'processModel.maxprocesses',
+      max_queue_length: 'queueLength',
+      recycle_periodic_minutes: 'recycling.periodicRestart.time',
+      recycle_schedule: 'recycling.periodicRestart.schedule',
+      recycle_logging: 'recycling',
     }
   end
 
@@ -27,26 +47,54 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
 
   def self.instances
     pools = []
-    inst_cmd = 'Import-Module WebAdministration;gci "IIS:\AppPools" | Select State,Name,enable32BitApponWin64,managedRuntimeVersion,managedPipelineMode | ConvertTo-Xml -Depth 4 -NoTypeInformation -As String'
+    #State,Name,enable32BitApponWin64,managedRuntimeVersion,managedPipelineMode
+    inst_cmd = 'Import-Module WebAdministration;gci "IIS:\AppPools" | Select * | ConvertTo-Xml -Depth 4 -NoTypeInformation -As String'
     result = run(inst_cmd)
     xml = Document.new result
     xml.root.each_element do |object|
       pool_hash = {
-        :ensure        => object.elements["Property[@Name='state']"].text.downcase,
-        :name          => object.elements["Property[@Name='name']"].text,
-        :enable_32_bit => object.elements["Property[@Name='enable32BitAppOnWin64']"].text.downcase,  #.to_s.to_sym || :false,
-        :runtime       => object.elements["Property[@Name='managedRuntimeVersion']"].text,
-        :pipeline      => object.elements["Property[@Name='managedPipelineMode']"].text,
+        :ensure                   => object.elements["Property[@Name='state']"].text.downcase,
+        :name                     => object.elements["Property[@Name='name']"].text,
+        :enable_32_bit            => object.elements["Property[@Name='enable32BitAppOnWin64']"].text.downcase,  #.to_s.to_sym || :false,
+        :runtime                  => object.elements["Property[@Name='managedRuntimeVersion']"].text,
+        :pipeline                 => object.elements["Property[@Name='managedPipelineMode']"].text,
+        :start_mode               => object.elements["Property[@Name='startMode']"].text,
+        :username                 => object.elements["Property[@Name='processModel']/Property[@Name='userName']"].text,
+        :password                 => object.elements["Property[@Name='processModel']/Property[@Name='password']"].text,
+        :idle_timeout             => object.elements["Property[@Name='processModel']/Property[@Name='idleTimeout']"].text,
+        #:idle_timeout_action      => object.elements["Property[@Name='processModel']/Property[@Name='idleTimeoutAction']"].text,
+        :identitytype             => object.elements["Property[@Name='processModel']/Property[@Name='identityType']"].text,
+        :max_processes            => object.elements["Property[@Name='processModel']/Property[@Name='maxProcesses']"].text,
+        :max_queue_length         => object.elements["Property[@Name='queueLength']"].text,
+        :rapid_fail_protection    => object.elements["Property[@Name='failure']/Property[@Name='rapidFailProtection']"].text,
+        :recycle_periodic_minutes => object.elements["Property[@Name='recycling']/Property[@Name='periodicRestart']/Property[@Name='time']"].text,      
+        :recycle_schedule         => object.elements["Property[@Name='recycling']/Property[@Name='periodicRestart']/Property[@Name='schedule']"].text,      
+        :recycle_logging          => object.elements["Property[@Name='recycling']/Property[@Name='logEventOnRecycle']"].text,      
       }
+      unless Facter.value(:kernelmajversion) == '6.1'
+        pool_hash[:idle_timeout_action] = object.elements["Property[@Name='processModel']/Property[@Name='idleTimeoutAction']"].text
+      end
       pools.push(pool_hash)
     end
     pools.map do |pool|
       new(
-        :ensure        => pool[:ensure],
-        :name          => pool[:name],
-        :enable_32_bit => pool[:enable_32_bit],
-        :runtime       => pool[:runtime],
-        :pipeline      => pool[:pipeline],
+        :ensure                    => pool[:ensure],
+        :name                      => pool[:name],
+        :enable_32_bit             => pool[:enable_32_bit],
+        :runtime                   => pool[:runtime],
+        :pipeline                  => pool[:pipeline].downcase,
+        :start_mode                => pool[:start_mode].downcase,
+        :username                  => pool[:username],
+        :password                  => pool[:password],
+        :idle_timeout              => pool[:idle_timeout],
+        :idle_timeout_action       => pool[:idle_timeout_action],
+        :identitytype              => pool[:identitytype],
+        :max_processes             => pool[:max_processes],
+        :max_queue_length          => pool[:max_queue_length],
+        :rapid_fail_protection     => pool[:rapid_fail_protection],
+        :recycle_periodic_minutes  => pool[:recycle_periodic_minutes],
+        :recycle_schedule          => pool[:recycle_schedule].strip,
+        :recycle_logging           => pool[:recycle_logging],
       )
     end
   end
@@ -143,7 +191,17 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
       command_array << state_cmd
     end
     @property_flush['poolattrs'].each do |poolattr, value|
-      command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" #{poolattr} #{value}"
+      if poolattr.is_a?(Hash)
+        value = value.downcase
+        poolattr.each do |k,v|
+          val = Puppet.notice poolattr[k][value]
+          key = k
+          command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" #{key} #{val}"
+        end
+      else
+        command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" #{poolattr} #{value}"
+        #Set-ItemProperty \"IIS:\\AppPools\\${app_pool_name}\" processmodel.idletimeoutaction ${apppool_idle_timeout_action}
+      end
     end
     resp = Puppet::Type::Iis_pool::ProviderPowershell.run(command_array.join('; '))
     raise(resp) unless resp.empty?
