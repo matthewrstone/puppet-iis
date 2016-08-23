@@ -121,24 +121,32 @@ Puppet::Type.newtype(:iis_pool) do
   end
 
   newproperty(:recycle_schedule) do
-    desc 'the recycle schedule'
+    desc 'the time of day to recycle the app pool'
+    validate do |value|
+    unless
+      value =~ /^(?:(?:([01]?\d|2[0-3]):)?([0-5]?\d):)?([0-5]?\d)$/
+        raise 'recycle_schedule must be formatted as HH::MM::SS'
+      end
+    end
   end
 
   newproperty(:recycle_logging, :array_matching => :all) do
     desc 'enable recycle logging'
+    # Regex strings for case sensitivity and easier array handling
     newvalues(/time|memory|requests|schedule|isapiunhealthy|configchange|privatememory/i)
+    # this must be an array
+    validate do |value|
+      raise 'recycle_logging must be an Array' unless value.split(',').is_a?(Array)
+    end
+    # the sorted property array must match the sorted resource array
     def insync?(is)
       is = is.to_s.split(',')
-      Puppet.notice "is is #{is}"
-      moo = should.flatten
-      Puppet.notice "should is #{moo}"
-      if is.is_a?(Array)
-        should == is
-      end
+      is.sort == should.sort
     end
     munge do |value|
       # these values must match the right case to be accepted
       # by Powershell.
+      # TODO THESE MUST SORT BY MICROSOFTS ORDER OF THINGS.
       case value
         when /isapiunhealthy/i
           "IsapiUnhealthy"

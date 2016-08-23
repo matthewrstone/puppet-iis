@@ -169,3 +169,10 @@ be able to use it.
 * `site`
 (Read-only) Web site in which the application resides.
 To change sites, remove and re-create application.
+
+## Troubleshooting / Known Issues
+
+`Error: /Stage[main]/Main/Iis_pool[MyAppPool]: Could not evaluate: Set-ItemProperty : Flags must be some combination of Time, Requests, Schedule, Memory, IsapiUnhealthy, OnDemand, ConfigChange, PrivateMemory`
+
+If you receive this error you need to set the order of the items in the recycle_logging array to match the order of the flags above. For example,
+If you have the array set to `["Time","Memory","Requests"]` you will need to reorder it to `["Time","Requests","Memory"]`

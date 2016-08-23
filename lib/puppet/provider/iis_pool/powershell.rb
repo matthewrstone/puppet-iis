@@ -6,18 +6,17 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
   def initialize(value = {})
     super(value)
     @property_flush = {
-      'poolattrs' => {}
+      'poolattrs'  => {},
     }
   end
 
-
-
   def self.poolattrs
+    # If the PS values vary from the Puppet values, like strings to Int32, then use a
+    # hash (see pipeline).
     {
       autostart: 'autostart',
       enable_32_bit: 'enable32BitAppOnWin64',
       runtime: 'managedRuntimeVersion',
-      # If options change to Int32, make a hash of the key and values like below.
       pipeline: {
         'managedPipelineMode' => {
           'integrated' => 0,
@@ -47,9 +46,24 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
       max_processes: 'processModel.maxprocesses',
       max_queue_length: 'queueLength',
       recycle_periodic_minutes: 'recycling.periodicRestart.time',
-      recycle_schedule: 'recycling.periodicRestart.schedule',
       recycle_logging: 'recycling.logEventOnRecycle',
+      recycle_schedule: 'recycling.periodicRestart.schedule',
     }
+  end
+
+  def self.get_recycle_schedule(name)
+    # need to get the recycling schedule via Get-ItemProperty for the AppPools
+    # as the collection info from the main XML dump is blank (at least on 2008).
+    result = run("Import-Module WebAdministration;Get-ItemProperty IIS:\\AppPools\\'#{name}' | Select recycling | ConvertTo-XML -As String -Depth 4 -NoTypeInformation")
+    xml = Document.new result
+    xml.root.each_element do |object|
+      if !object.elements["Property[@Name='recycling']/Property[@Name='periodicRestart']/Property[@Name='schedule']/Property[@Name='Collection']/Property/Property[@Name='value']"]
+        schedule = ''
+      else
+        schedule = object.elements["Property[@Name='recycling']/Property[@Name='periodicRestart']/Property[@Name='schedule']/Property[@Name='Collection']/Property/Property[@Name='value']"].text
+      end
+      return schedule
+    end
   end
 
   def self.instances
@@ -58,9 +72,11 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
     result = run(inst_cmd)
     xml = Document.new result
     xml.root.each_element do |object|
+      name = object.elements["Property[@Name='name']"].text
+      r_schedule = get_recycle_schedule(name)
       pool_hash = {
         :ensure                   => object.elements["Property[@Name='state']"].text,
-        :name                     => object.elements["Property[@Name='name']"].text,
+        :name                     => name,
         :enable_32_bit            => object.elements["Property[@Name='enable32BitAppOnWin64']"].text,  #.to_s.to_sym || :false,
         :runtime                  => object.elements["Property[@Name='managedRuntimeVersion']"].text,
         :pipeline                 => object.elements["Property[@Name='managedPipelineMode']"].text,
@@ -74,7 +90,7 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
         :max_queue_length         => object.elements["Property[@Name='queueLength']"].text,
         :rapid_fail_protection    => object.elements["Property[@Name='failure']/Property[@Name='rapidFailProtection']"].text,
         :recycle_periodic_minutes => object.elements["Property[@Name='recycling']/Property[@Name='periodicRestart']/Property[@Name='time']"].text,      
-        :recycle_schedule         => object.elements["Property[@Name='recycling']/Property[@Name='periodicRestart']/Property[@Name='schedule']"].text,      
+        :recycle_schedule         => r_schedule,      
         :recycle_logging          => object.elements["Property[@Name='recycling']/Property[@Name='logEventOnRecycle']"].text,      
       }
       unless Facter.value(:kernelmajversion) == '6.1'
@@ -124,8 +140,11 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
 
   def create
     inst_cmd = "Import-Module WebAdministration; New-WebAppPool -Name \"#{@resource[:name]}\" -ErrorVariable err | Out-Null; \$err"
-    Puppet::Type::Iis_pool::ProviderPowershell.poolattrs.each do |property, value|
+    self.poolattrs.each do |property, value|
       inst_cmd += "; Set-ItemProperty \"IIS:\\\\AppPools\\#{@resource[:name]}\" #{value} #{@resource[property]}" if @resource[property]
+    end
+    self.poolhashes.each do |property, value|
+      inst_cmd += "; Set-ItemProperty \"IIS:\\\\AppPools\\#{@resource[:name]}\" #{value} @{value=#{@resource[property]}}" if @resource[property]
     end
     resp = Puppet::Type::Iis_pool::ProviderPowershell.run(inst_cmd)
     Puppet.debug "Creation powershell response was #{resp}"
@@ -146,13 +165,8 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
     exists? ? (return false) : (return true)
   end
 
-  Puppet::Type::Iis_pool::ProviderPowershell.poolattrs.each do |property, poolattr|
+  self.poolattrs.each do |property,poolattr|
     define_method "#{property}=" do |value|
-      if value.is_a?(Array)
-        #@property_hash[property] = value.join(',').downcase
-        #value = value.downcase
-        Puppet.notice @property_hash[property]
-      end
       @property_hash[property] = value
       @property_flush['poolattrs'][poolattr] = value
     end
@@ -201,6 +215,7 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
       state_cmd += " -Name \"#{@property_hash[:name]}\""
       command_array << state_cmd
     end
+    Puppet.notice @property_flush
     @property_flush['poolattrs'].each do |poolattr, value|
       if poolattr.is_a?(Hash)
         # set variables for the key, downcase the value, get the property value for powershell
@@ -215,10 +230,13 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
         alt_value = value.join(',')
         alt_hash = "@{#{alt_property}='#{alt_value}'}"
         command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" -Name #{alt_key} -Value #{alt_hash}"
+      elsif poolattr == 'recycling.periodicRestart.schedule'
+        command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" -Name #{poolattr} -Value @{value=\"#{value}\"}"
       else
         command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" #{poolattr} #{value}"
       end
     end
+
     Puppet.notice command_array
     resp = Puppet::Type::Iis_pool::ProviderPowershell.run(command_array.join('; '))
     raise(resp) unless resp.empty?
