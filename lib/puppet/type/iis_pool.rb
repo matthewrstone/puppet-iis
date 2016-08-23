@@ -49,8 +49,10 @@ Puppet::Type.newtype(:iis_pool) do
 
   newproperty(:pipeline) do
     desc 'The pipeline mode for the application pool'
-    newvalues(:Integrated, :Classic, :integrated, :classic)
-    munge(&:capitalize)
+    newvalues(
+      :integrated,:Integrated,
+      :classic,:Classic
+    )
   end
 
 ## NEW APP POOL SETTINGS
@@ -62,7 +64,10 @@ Puppet::Type.newtype(:iis_pool) do
 
   newproperty(:start_mode) do
     desc 'The start mode for the app pool.'
-    newvalues(:OnDemand,:ondemand,:AlwaysRunning,:alwaysrunning)
+    newvalues(
+      :ondemand,:OnDemand,
+      :alwaysrunning,:alwaysrunning
+    )
     #validate do |value|
     #  raise("#{start_mode must be OnDemand or AlwaysRunning}") unless value =~ %r{^(OnDemand|AlwaysRunning)$}
     #end
@@ -76,11 +81,12 @@ Puppet::Type.newtype(:iis_pool) do
 
   newproperty(:identitytype) do
     desc 'Set the identity type'
-    newvalues(:localsystem,
-              :localservice,
-              :networkservice,
-              :specificuser,
-              :applicationpoolidentity,
+    newvalues(
+      :localsystem,:LocalSystem,
+      :localservice,:LocalService,
+      :networkservice,:NetworkService,
+      :specificuser,:SpecificUser,
+      :applicationpoolidentity,:applicationpoolidentity
     )
   end
 
@@ -118,8 +124,18 @@ Puppet::Type.newtype(:iis_pool) do
     desc 'the recycle schedule'
   end
 
-  newproperty(:recycle_logging) do
+  newproperty(:recycle_logging, :array_matching => :all) do
     desc 'enable recycle logging'
+    newvalues(
+      :time,:time,
+      :requests,:Requests,
+      :schedule,:Schedule,
+      :memory,:Memory,
+      :isapiunhealthy,:IsapiUnhealthy,
+      :ondemand,:OnDemand,
+      :configchange,:ConfigChange,
+      :privatememory,:PrivateMemory
+    )
   end
   
   def refresh

@@ -22,10 +22,22 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
           'classic'    => 1,
         },
       },
-      # TODO IDLE TIMEOUT ACTION FROM XML
-      start_mode: 'startMode',
+      start_mode: {
+        'startMode' => {
+          'ondemand'      => 0,
+          'alwaysrunning' => 1,
+        },
+      },
       rapid_fail_protection: 'failure.rapidFailProtection',
-      identitytype: 'processModel.identityType',
+      identitytype: {
+        'processModel.identityType' => {
+          'localsystem'             => 0,
+          'localservice'            => 1,
+          'networkservice'          => 2,
+          'specificuser'            => 3,
+          'applicationpoolidentity' => 4,
+        },
+      },
       username: 'processModel.username',
       password: 'processModel.password',
       idle_timeout: 'processModel.idleTimeout',
@@ -34,35 +46,27 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
       max_queue_length: 'queueLength',
       recycle_periodic_minutes: 'recycling.periodicRestart.time',
       recycle_schedule: 'recycling.periodicRestart.schedule',
-      recycle_logging: 'recycling',
-    }
-  end
-
-  def self.pipelines
-    {
-      0 => 'Integrated',
-      1 => 'Classic'
+      recycle_logging: 'recycling.logEventOnRecycle',
     }
   end
 
   def self.instances
     pools = []
-    #State,Name,enable32BitApponWin64,managedRuntimeVersion,managedPipelineMode
     inst_cmd = 'Import-Module WebAdministration;gci "IIS:\AppPools" | Select * | ConvertTo-Xml -Depth 4 -NoTypeInformation -As String'
     result = run(inst_cmd)
     xml = Document.new result
     xml.root.each_element do |object|
       pool_hash = {
-        :ensure                   => object.elements["Property[@Name='state']"].text.downcase,
+        :ensure                   => object.elements["Property[@Name='state']"].text,
         :name                     => object.elements["Property[@Name='name']"].text,
-        :enable_32_bit            => object.elements["Property[@Name='enable32BitAppOnWin64']"].text.downcase,  #.to_s.to_sym || :false,
+        :enable_32_bit            => object.elements["Property[@Name='enable32BitAppOnWin64']"].text,  #.to_s.to_sym || :false,
         :runtime                  => object.elements["Property[@Name='managedRuntimeVersion']"].text,
         :pipeline                 => object.elements["Property[@Name='managedPipelineMode']"].text,
         :start_mode               => object.elements["Property[@Name='startMode']"].text,
+        :autostart                => object.elements["Property[@Name='autoStart']"].text,
         :username                 => object.elements["Property[@Name='processModel']/Property[@Name='userName']"].text,
         :password                 => object.elements["Property[@Name='processModel']/Property[@Name='password']"].text,
         :idle_timeout             => object.elements["Property[@Name='processModel']/Property[@Name='idleTimeout']"].text,
-        #:idle_timeout_action      => object.elements["Property[@Name='processModel']/Property[@Name='idleTimeoutAction']"].text,
         :identitytype             => object.elements["Property[@Name='processModel']/Property[@Name='identityType']"].text,
         :max_processes            => object.elements["Property[@Name='processModel']/Property[@Name='maxProcesses']"].text,
         :max_queue_length         => object.elements["Property[@Name='queueLength']"].text,
@@ -78,23 +82,24 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
     end
     pools.map do |pool|
       new(
-        :ensure                    => pool[:ensure],
+        :ensure                    => pool[:ensure].downcase,
         :name                      => pool[:name],
-        :enable_32_bit             => pool[:enable_32_bit],
+        :enable_32_bit             => pool[:enable_32_bit].downcase,
         :runtime                   => pool[:runtime],
         :pipeline                  => pool[:pipeline].downcase,
         :start_mode                => pool[:start_mode].downcase,
+        :autostart                 => pool[:autostart].downcase,
         :username                  => pool[:username],
         :password                  => pool[:password],
         :idle_timeout              => pool[:idle_timeout],
         :idle_timeout_action       => pool[:idle_timeout_action],
-        :identitytype              => pool[:identitytype],
+        :identitytype              => pool[:identitytype].downcase,
         :max_processes             => pool[:max_processes],
         :max_queue_length          => pool[:max_queue_length],
-        :rapid_fail_protection     => pool[:rapid_fail_protection],
+        :rapid_fail_protection     => pool[:rapid_fail_protection].downcase,
         :recycle_periodic_minutes  => pool[:recycle_periodic_minutes],
         :recycle_schedule          => pool[:recycle_schedule].strip,
-        :recycle_logging           => pool[:recycle_logging],
+        :recycle_logging           => pool[:recycle_logging].downcase,
       )
     end
   end
@@ -122,7 +127,6 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
     end
     resp = Puppet::Type::Iis_pool::ProviderPowershell.run(inst_cmd)
     Puppet.debug "Creation powershell response was #{resp}"
-
     @resource.original_parameters.each_key do |k|
       @property_hash[k] = @resource[k]
     end
@@ -142,8 +146,8 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
 
   Puppet::Type::Iis_pool::ProviderPowershell.poolattrs.each do |property, poolattr|
     define_method "#{property}=" do |value|
-      @property_flush['poolattrs'][poolattr] = value
       @property_hash[property] = value
+      @property_flush['poolattrs'][poolattr] = value
     end
   end
 
@@ -192,15 +196,20 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
     end
     @property_flush['poolattrs'].each do |poolattr, value|
       if poolattr.is_a?(Hash)
+        # set variables for the key, downcase the value, get the property value for powershell
         value = value.downcase
-        poolattr.each do |k,v|
-          val = Puppet.notice poolattr[k][value]
-          key = k
-          command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" #{key} #{val}"
-        end
+        key = poolattr.keys[0]
+        property_value = poolattr["#{key}"]["#{value}"]
+        command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" #{key} #{property_value}"
+      # if the values are an array we set the values with a hash
+      elsif value.is_a?(Array)
+        alt_key = poolattr.split('.')[0]
+        alt_property = poolattr.split('.')[1]
+        alt_value = value.join(',')
+        alt_hash = "@{#{alt_property}='#{alt_value}'}"
+        command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" -Name #{alt_key} -Value #{alt_hash}"
       else
         command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" #{poolattr} #{value}"
-        #Set-ItemProperty \"IIS:\\AppPools\\${app_pool_name}\" processmodel.idletimeoutaction ${apppool_idle_timeout_action}
       end
     end
     resp = Puppet::Type::Iis_pool::ProviderPowershell.run(command_array.join('; '))
