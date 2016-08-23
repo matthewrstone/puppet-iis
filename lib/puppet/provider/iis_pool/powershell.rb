@@ -10,6 +10,8 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
     }
   end
 
+
+
   def self.poolattrs
     {
       autostart: 'autostart',
@@ -99,7 +101,7 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
         :rapid_fail_protection     => pool[:rapid_fail_protection].downcase,
         :recycle_periodic_minutes  => pool[:recycle_periodic_minutes],
         :recycle_schedule          => pool[:recycle_schedule].strip,
-        :recycle_logging           => pool[:recycle_logging].downcase,
+        :recycle_logging           => pool[:recycle_logging],
       )
     end
   end
@@ -146,6 +148,11 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
 
   Puppet::Type::Iis_pool::ProviderPowershell.poolattrs.each do |property, poolattr|
     define_method "#{property}=" do |value|
+      if value.is_a?(Array)
+        #@property_hash[property] = value.join(',').downcase
+        #value = value.downcase
+        Puppet.notice @property_hash[property]
+      end
       @property_hash[property] = value
       @property_flush['poolattrs'][poolattr] = value
     end
@@ -212,6 +219,7 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
         command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" #{poolattr} #{value}"
       end
     end
+    Puppet.notice command_array
     resp = Puppet::Type::Iis_pool::ProviderPowershell.run(command_array.join('; '))
     raise(resp) unless resp.empty?
   end

@@ -126,16 +126,30 @@ Puppet::Type.newtype(:iis_pool) do
 
   newproperty(:recycle_logging, :array_matching => :all) do
     desc 'enable recycle logging'
-    newvalues(
-      :time,:time,
-      :requests,:Requests,
-      :schedule,:Schedule,
-      :memory,:Memory,
-      :isapiunhealthy,:IsapiUnhealthy,
-      :ondemand,:OnDemand,
-      :configchange,:ConfigChange,
-      :privatememory,:PrivateMemory
-    )
+    newvalues(/time|memory|requests|schedule|isapiunhealthy|configchange|privatememory/i)
+    def insync?(is)
+      is = is.to_s.split(',')
+      Puppet.notice "is is #{is}"
+      moo = should.flatten
+      Puppet.notice "should is #{moo}"
+      if is.is_a?(Array)
+        should == is
+      end
+    end
+    munge do |value|
+      # these values must match the right case to be accepted
+      # by Powershell.
+      case value
+        when /isapiunhealthy/i
+          "IsapiUnhealthy"
+        when /configchange/i
+          "ConfigChange"
+        when /privatememory/i
+          "PrivateMemory"
+        else
+          value.capitalize
+      end
+    end
   end
   
   def refresh
