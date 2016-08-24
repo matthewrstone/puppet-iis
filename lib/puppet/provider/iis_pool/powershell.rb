@@ -215,7 +215,6 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
       state_cmd += " -Name \"#{@property_hash[:name]}\""
       command_array << state_cmd
     end
-    Puppet.notice @property_flush
     @property_flush['poolattrs'].each do |poolattr, value|
       if poolattr.is_a?(Hash)
         # set variables for the key, downcase the value, get the property value for powershell
@@ -236,8 +235,6 @@ Puppet::Type.type(:iis_pool).provide(:powershell, parent: Puppet::Provider::Iisp
         command_array << "Set-ItemProperty \"IIS:\\\\AppPools\\#{@property_hash[:name]}\" #{poolattr} #{value}"
       end
     end
-
-    Puppet.notice command_array
     resp = Puppet::Type::Iis_pool::ProviderPowershell.run(command_array.join('; '))
     raise(resp) unless resp.empty?
   end

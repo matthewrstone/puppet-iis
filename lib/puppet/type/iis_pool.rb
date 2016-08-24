@@ -64,13 +64,7 @@ Puppet::Type.newtype(:iis_pool) do
 
   newproperty(:start_mode) do
     desc 'The start mode for the app pool.'
-    newvalues(
-      :ondemand,:OnDemand,
-      :alwaysrunning,:alwaysrunning
-    )
-    #validate do |value|
-    #  raise("#{start_mode must be OnDemand or AlwaysRunning}") unless value =~ %r{^(OnDemand|AlwaysRunning)$}
-    #end
+    newvalues(/ondemand|alwaysrunning/i)
   end
 
   newproperty(:rapid_fail_protection) do
@@ -81,13 +75,13 @@ Puppet::Type.newtype(:iis_pool) do
 
   newproperty(:identitytype) do
     desc 'Set the identity type'
-    newvalues(
-      :localsystem,:LocalSystem,
-      :localservice,:LocalService,
-      :networkservice,:NetworkService,
-      :specificuser,:SpecificUser,
-      :applicationpoolidentity,:applicationpoolidentity
-    )
+    newvalues(/localsystem|localservice|networkservice|specificuser|applicationpoolidentity/i)
+#      :localsystem,:LocalSystem,
+#      :localservice,:LocalService,
+#      :networkservice,:NetworkService,
+#      :specificuser,:SpecificUser,
+#      :applicationpoolidentity,:applicationpoolidentity
+#    )
   end
 
   newproperty(:username) do
@@ -100,6 +94,12 @@ Puppet::Type.newtype(:iis_pool) do
 
   newproperty(:idle_timeout) do
     desc 'set the idle timeout'
+    validate do |value|
+      unless
+        value =~ /^(?:(?:([01]?\d|2[0-3]):)?([0-5]?\d):)?([0-5]?\d)$/
+      raise 'idle_timeout must be formatted as HH::MM::SS'
+      end
+    end
   end
 
   newproperty(:idle_timeout_action) do
@@ -116,16 +116,22 @@ Puppet::Type.newtype(:iis_pool) do
     desc 'set max queue length'
   end
 
-  newproperty(:recycle_perodic_minutes) do
-    desc 'the recyle time in minutes'
+  newproperty(:recycle_periodic_minutes) do
+    desc 'recycle an app pool after an elapsed amount of time'
+    validate do |value|
+      unless
+        value =~ /^([1-7].|[0][0-7].)(?:(?:([01]?\d|2[0-3]):)([0-5]?\d):)([0-5]?\d)$/
+      raise 'recycle_periodic_minutes must take the format of D.HH:MM:SS'
+      end
+    end
   end
 
   newproperty(:recycle_schedule) do
-    desc 'the time of day to recycle the app pool'
+    desc 'recycle the app pool at a scheduled time'
     validate do |value|
-    unless
-      value =~ /^(?:(?:([01]?\d|2[0-3]):)?([0-5]?\d):)?([0-5]?\d)$/
-        raise 'recycle_schedule must be formatted as HH::MM::SS'
+      unless
+        value =~ /^(?:(?:([01]?\d|2[0-3]):)?([0-5]?\d):)?([0-5]?\d)$/
+      raise 'recycle_schedule must be formatted as HH::MM::SS'
       end
     end
   end
